@@ -71,11 +71,13 @@ def linear(x, V, g, b=None):
 
 class Linear(link.Link):
 
-	def __init__(self, in_size, out_size, wscale=1, bias=0, nobias=False, initialV=None, initial_bias=None):
+	def __init__(self, in_size, out_size, wscale=1, bias=0, nobias=False, initialV=None):
 		super(Linear, self).__init__()
 
+		self.initialized = False
 		self.initialV = initialV
 		self.wscale = wscale
+		self.nobias = nobias
 
 		self.out_size = out_size
 		self._V_initializer = initializers._get_initializer(initialV, math.sqrt(wscale))
@@ -83,23 +85,38 @@ class Linear(link.Link):
 		if in_size is None:
 			self.add_uninitialized_param("V")
 		else:
-			self._initialize_params(in_size)
+			self.initialize_weight(in_size)
 
 		if nobias:
 			self.b = None
 		else:
-			if initial_bias is None:
-				initial_bias = bias
-			bias_initializer = initializers._get_initializer(initial_bias)
-			self.add_param("b", out_size, initializer=bias_initializer)
+			self.add_uninitialized_param("b")
 
-		self.add_param("g", 1, initializer=initializers._get_initializer(1))
+´		self.add_uninitialized_param("g")
 
-	def _initialize_params(self, in_size):
+	def initialize_weight(self, in_size):
 		self.add_param("V", (self.out_size, in_size), initializer=self._V_initializer)
+
+	def initialize_params(self, t):
+		xp = cuda.get_array_module(t)
+		self.mean_t = float(xp.mean(t))
+		self.std_t = math.sqrt(float(xp.var(t)))
+		g = 1 / self.std_t
+		b = -self.mean_t / self.std_t
+
+		if self.nobias == False:
+			self.add_param("b", self.out_size, initializer=initializers._get_initializer(b))
+		self.add_param("g", 1, initializer=initializers._get_initializer(g))
+		
+		self.initialized = True
 
 	def __call__(self, x):
 		if self.has_uninitialized_params:
 			with cuda.get_device(self._device_id):
-				self._initialize_params(x.size // len(x.data))
+				self.initialize_weight(x.size // len(x.data))
+		if self.initialized == False:
+			t = linear(x, self.V, 1)	# compute output with g = 1 and without bias
+			self.initialize_params(t)
+			return (t - self.mean_t) / self.std_t
+
 		return linear(x, self.V, self.g, self.b)

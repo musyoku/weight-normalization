@@ -123,16 +123,17 @@ class Convolution2D(link.Link):
 		self.use_cudnn = use_cudnn
 		self.out_channels = out_channels
 
+		self.initialized = False
 		self.initialV = initialV
 		self.wscale = wscale
+		self.nobias = nobias
 
-		self._W_initializer = initializers._get_initializer(
-			initialV, scale=math.sqrt(wscale))
+		self._W_initializer = initializers._get_initializer(initialV, scale=math.sqrt(wscale))
 
 		if in_channels is None:
 			self.add_uninitialized_param("V")
 		else:
-			self._initialize_params(in_channels)
+			self.initialize_weight(in_channels)
 
 		if nobias:
 			self.b = None
@@ -144,13 +145,32 @@ class Convolution2D(link.Link):
 			
 		self.add_param("g", 1, initializer=initializers._get_initializer(1))
 
-	def _initialize_params(self, in_channels):
+	def initialize_weight(self, in_channels):
 		kh, kw = _pair(self.ksize)
 		W_shape = (self.out_channels, in_channels, kh, kw)
 		self.add_param("V", W_shape, initializer=self._W_initializer)
 
+	def initialize_params(self, t):
+		xp = cuda.get_array_module(t)
+		self.mean_t = float(xp.mean(t))
+		self.std_t = math.sqrt(float(xp.var(t)))
+		g = 1 / self.std_t
+		b = -self.mean_t / self.std_t
+
+		if self.nobias == False:
+			self.add_param("b", self.out_size, initializer=initializers._get_initializer(b))
+		self.add_param("g", 1, initializer=initializers._get_initializer(g))
+		
+		self.initialized = True
+
 	def __call__(self, x):
 		if self.has_uninitialized_params:
 			with cuda.get_device(self._device_id):
-				self._initialize_params(x.shape[1])
+				self.initialize_weight(x.shape[1])
+
+		if self.initialized == False:
+			t = convolution_2d(x, self.V, 1, None, self.stride, self.pad, self.use_cudnn)	# compute output with g = 1 and without bias
+			self.initialize_params(t)
+			return (t - self.mean_t) / self.std_t
+
 		return convolution_2d(x, self.V, self.g, self.b, self.stride, self.pad, self.use_cudnn)
