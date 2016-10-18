@@ -37,9 +37,9 @@ class LinearFunction(function.Function):
 		V = inputs[1]
 		g = inputs[2]
 		xp = cuda.get_array_module(V)
-		self.norm_V = xp.linalg.norm(V)			# cache for backward operation
-		self.normalized_V = V / self.norm_V		# cache for backward operation
-		W = g * self.normalized_V
+		self.normV = xp.linalg.norm(V)
+		self.normalizedV = V / self.normV
+		W = g * self.normalizedV
 		y = x.dot(W.T).astype(x.dtype, copy=False)
 		if len(inputs) == 4:
 			b = inputs[3]
@@ -54,8 +54,8 @@ class LinearFunction(function.Function):
 
 		gx = gy.dot(W).astype(x.dtype, copy=False).reshape(inputs[0].shape)
 		gW = gy.T.dot(x).astype(W.dtype, copy=False)
-		gg = gW * self.normalized_V
-		gV = g * gW / self.norm_V - g * gg * self.normalized_V / self.norm_V
+		gg = gW * self.normalizedV
+		gV = g * gW / self.normV - g * gg * self.normalizedV / self.normV
 
 		if len(inputs) == 3:
 			gb = gy.sum(0)
