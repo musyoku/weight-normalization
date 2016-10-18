@@ -23,7 +23,7 @@ class TestLinear(unittest.TestCase):
 
 	def setUp(self):
 		in_size = np.prod(self.in_shape)
-		self.link = linear.Linear(in_size, self.out_size, initialV=chainer.initializers.Normal(1, self.W_dtype))
+		self.link = linear.Linear(in_size, self.out_size, initialV=chainer.initializers.Normal(1, self.W_dtype), dtype=self.x_dtype)
 
 		x_shape = (4,) + self.in_shape
 		self.x = np.random.uniform(-1, 1, x_shape).astype(self.x_dtype)
@@ -32,7 +32,7 @@ class TestLinear(unittest.TestCase):
 		if self.link.params_initialized == False:
 			y = self.link(Variable(self.x))
 
-		W = self.link.get_W_data()
+		W = self.link._get_W_data()
 		b = self.link.b.data
 		self.link.cleargrads()
 
@@ -64,7 +64,7 @@ class TestLinear(unittest.TestCase):
 
 	def check_backward(self, x_data, y_grad):
 		gradient_check.check_backward(
-			self.link, x_data, y_grad, (self.link.W, self.link.b), eps=2 ** -3,
+			self.link, x_data, y_grad, (self.link.V, self.link.g, self.link.b), eps=2 ** -3,
 			**self.check_backward_options)
 
 	@condition.retry(3)
@@ -77,7 +77,6 @@ class TestLinear(unittest.TestCase):
 		self.link.to_gpu()
 		self.check_backward(cuda.to_gpu(self.x), cuda.to_gpu(self.gy))
 
-
 class TestLinearParameterShapePlaceholder(unittest.TestCase):
 
 	in_size = 3
@@ -89,21 +88,22 @@ class TestLinearParameterShapePlaceholder(unittest.TestCase):
 		self.link = linear.Linear(self.in_size_or_none, self.out_size)
 		temp_x = np.random.uniform(-1, 1, (self.out_size, self.in_size)).astype(np.float32)
 
-		# init
-		if self.link.params_initialized == False:
-			y = self.link(Variable(temp_x))
-		
 		self.link(Variable(temp_x))
-		W = self.link.get_W_data()
-		W[...] = np.random.uniform(-1, 1, W.shape)
+		V = self.link.V.data
+		V[...] = np.random.uniform(-1, 1, V.shape).astype(np.float32)
+		g = self.link.g.data
+		g[...] = np.random.uniform(-1, 1, g.shape).astype(np.float32)
 		b = self.link.b.data
-		b[...] = np.random.uniform(-1, 1, b.shape)
+		b[...] = np.random.uniform(-1, 1, b.shape).astype(np.float32)
+
+		W = g * V / np.linalg.norm(V)
 		self.link.cleargrads()
 
 		x_shape = (4,) + self.in_shape
 		self.x = np.random.uniform(-1, 1, x_shape).astype(np.float32)
-		self.gy = np.random.uniform(
-			-1, 1, (4, self.out_size)).astype(np.float32)
+		self.x = np.ones(x_shape).astype(np.float32)
+		self.gy = np.random.uniform(-1, 1, (4, self.out_size)).astype(np.float32)
+		self.gy = np.ones((4, self.out_size)).astype(np.float32)
 		self.y = self.x.reshape(4, -1).dot(W.T) + b
 
 	def check_forward(self, x_data):
@@ -112,26 +112,25 @@ class TestLinearParameterShapePlaceholder(unittest.TestCase):
 		self.assertEqual(y.data.dtype, np.float32)
 		testing.assert_allclose(self.y, y.data)
 
-	@condition.retry(3)
+	@condition.retry(12)
 	def test_forward_cpu(self):
 		self.check_forward(self.x)
 
 	@attr.gpu
-	@condition.retry(3)
+	@condition.retry(12)
 	def test_forward_gpu(self):
 		self.link.to_gpu()
 		self.check_forward(cuda.to_gpu(self.x))
 
 	def check_backward(self, x_data, y_grad):
-		gradient_check.check_backward(
-			self.link, x_data, y_grad, (self.link.W, self.link.b), eps=1e-2)
+		gradient_check.check_backward(self.link, x_data, y_grad, (self.link.V, self.link.g, self.link.b), eps=1e-2)
 
-	@condition.retry(3)
+	@condition.retry(12)
 	def test_backward_cpu(self):
 		self.check_backward(self.x, self.gy)
 
 	@attr.gpu
-	@condition.retry(3)
+	@condition.retry(12)
 	def test_backward_gpu(self):
 		self.link.to_gpu()
 		self.check_backward(cuda.to_gpu(self.x), cuda.to_gpu(self.gy))
@@ -141,15 +140,14 @@ class TestLinearParameterShapePlaceholder(unittest.TestCase):
 		x = Variable(self.x)
 		# Must call the link to initialize weights.
 		lin1(x)
-		w1 = lin1.W.data
+		w1 = lin1._get_W_data()
 		fd, temp_file_path = tempfile.mkstemp()
 		os.close(fd)
 		npz.save_npz(temp_file_path, lin1)
 		lin2 = linear.Linear(None, self.out_size)
 		npz.load_npz(temp_file_path, lin2)
-		w2 = lin2.W.data
+		w2 = lin2._get_W_data()
 		self.assertEqual((w1 == w2).all(), True)
-
 
 class TestInvalidLinear(unittest.TestCase):
 
@@ -158,12 +156,9 @@ class TestInvalidLinear(unittest.TestCase):
 		self.x = np.random.uniform(-1, 1, (4, 1, 2)).astype(np.float32)
 
 	def test_invalid_size(self):
-		# init 
-		self.link(Variable(self.x))
 
 		with self.assertRaises(type_check.InvalidType):
 			self.link(Variable(self.x))
-
 
 def check_implementation():
 	in_size = 5
