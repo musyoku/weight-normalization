@@ -3,14 +3,14 @@ import tempfile
 import unittest
 import numpy as np
 import chainer
-from chainer import cuda
+from chainer import cuda, Variable
 from chainer import gradient_check
-from chainer import links
 from chainer.serializers import npz
 from chainer import testing
 from chainer.testing import attr
 from chainer.testing import condition
 from chainer.utils import type_check
+import linear
 
 @testing.parameterize(*testing.product({
 	"in_shape": [(3,), (3, 2, 2)],
@@ -23,18 +23,20 @@ class TestLinear(unittest.TestCase):
 
 	def setUp(self):
 		in_size = np.prod(self.in_shape)
-		self.link = links.Linear(
-			in_size, self.out_size,
-			initialW=chainer.initializers.Normal(1, self.W_dtype),
-			initial_bias=chainer.initializers.Normal(1, self.x_dtype))
-		W = self.link.W.data
-		b = self.link.b.data
-		self.link.cleargrads()
+		self.link = linear.Linear(in_size, self.out_size, initialV=chainer.initializers.Normal(1, self.W_dtype))
 
 		x_shape = (4,) + self.in_shape
 		self.x = np.random.uniform(-1, 1, x_shape).astype(self.x_dtype)
-		self.gy = np.random.uniform(
-			-1, 1, (4, self.out_size)).astype(self.x_dtype)
+
+		# init
+		if self.link.params_initialized == False:
+			y = self.link(Variable(self.x))
+
+		W = self.link.get_W_data()
+		b = self.link.b.data
+		self.link.cleargrads()
+
+		self.gy = np.random.uniform(-1, 1, (4, self.out_size)).astype(self.x_dtype)
 		self.y = self.x.reshape(4, -1).dot(W.T) + b
 		self.check_forward_options = {}
 		self.check_backward_options = {}
@@ -45,7 +47,7 @@ class TestLinear(unittest.TestCase):
 			self.check_backward_options = {"atol": 1e-3, "rtol": 1e-2}
 
 	def check_forward(self, x_data):
-		x = chainer.Variable(x_data)
+		x = Variable(x_data)
 		y = self.link(x)
 		self.assertEqual(y.data.dtype, self.x_dtype)
 		testing.assert_allclose(self.y, y.data, **self.check_forward_options)
@@ -84,12 +86,15 @@ class TestLinearParameterShapePlaceholder(unittest.TestCase):
 	in_size_or_none = None
 
 	def setUp(self):
-		self.link = links.Linear(self.in_size_or_none, self.out_size)
-		temp_x = np.random.uniform(-1, 1,
-									  (self.out_size,
-									   self.in_size)).astype(np.float32)
-		self.link(chainer.Variable(temp_x))
-		W = self.link.W.data
+		self.link = linear.Linear(self.in_size_or_none, self.out_size)
+		temp_x = np.random.uniform(-1, 1, (self.out_size, self.in_size)).astype(np.float32)
+
+		# init
+		if self.link.params_initialized == False:
+			y = self.link(Variable(temp_x))
+		
+		self.link(Variable(temp_x))
+		W = self.link.get_W_data()
 		W[...] = np.random.uniform(-1, 1, W.shape)
 		b = self.link.b.data
 		b[...] = np.random.uniform(-1, 1, b.shape)
@@ -102,7 +107,7 @@ class TestLinearParameterShapePlaceholder(unittest.TestCase):
 		self.y = self.x.reshape(4, -1).dot(W.T) + b
 
 	def check_forward(self, x_data):
-		x = chainer.Variable(x_data)
+		x = Variable(x_data)
 		y = self.link(x)
 		self.assertEqual(y.data.dtype, np.float32)
 		testing.assert_allclose(self.y, y.data)
@@ -132,15 +137,15 @@ class TestLinearParameterShapePlaceholder(unittest.TestCase):
 		self.check_backward(cuda.to_gpu(self.x), cuda.to_gpu(self.gy))
 
 	def test_serialization(self):
-		lin1 = links.Linear(None, self.out_size)
-		x = chainer.Variable(self.x)
+		lin1 = linear.Linear(None, self.out_size)
+		x = Variable(self.x)
 		# Must call the link to initialize weights.
 		lin1(x)
 		w1 = lin1.W.data
 		fd, temp_file_path = tempfile.mkstemp()
 		os.close(fd)
 		npz.save_npz(temp_file_path, lin1)
-		lin2 = links.Linear(None, self.out_size)
+		lin2 = linear.Linear(None, self.out_size)
 		npz.load_npz(temp_file_path, lin2)
 		w2 = lin2.W.data
 		self.assertEqual((w1 == w2).all(), True)
@@ -149,12 +154,29 @@ class TestLinearParameterShapePlaceholder(unittest.TestCase):
 class TestInvalidLinear(unittest.TestCase):
 
 	def setUp(self):
-		self.link = links.Linear(3, 2)
+		self.link = linear.Linear(3, 2)
 		self.x = np.random.uniform(-1, 1, (4, 1, 2)).astype(np.float32)
 
 	def test_invalid_size(self):
-		with self.assertRaises(type_check.InvalidType):
-			self.link(chainer.Variable(self.x))
+		# init 
+		self.link(Variable(self.x))
 
+		with self.assertRaises(type_check.InvalidType):
+			self.link(Variable(self.x))
+
+
+def check_implementation():
+	in_size = 5
+	out_size = 2
+	link = linear.Linear(in_size, out_size, initialV=chainer.initializers.Normal(1, np.float32))
+
+	x_shape = (4,) + (in_size,)
+	x = np.random.uniform(-1, 1, x_shape).astype(np.float32)
+
+	# init
+	if link.params_initialized == False:
+		y = link(Variable(x))
+
+check_implementation()
 
 testing.run_module(__name__, __file__)

@@ -48,7 +48,7 @@ def _pair(x):
 		return x
 	return x, x
 
-class Convolution2DFunction(function.Function):
+class Convolution2DFunction(convolution_2d.Convolution2DFunction):
 
 	def forward_cpu(self, inputs):
 		x, V, g = inputs[:3]
