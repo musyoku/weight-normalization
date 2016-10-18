@@ -49,7 +49,6 @@ class LinearFunction(linear.LinearFunction):
 		g = inputs[2]
 		xp = cuda.get_array_module(V)
 
-
 		self.normV = xp.linalg.norm(V)
 		self.normalizedV = V / self.normV
 		self.W = g * self.normalizedV

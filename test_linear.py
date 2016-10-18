@@ -30,7 +30,7 @@ class TestLinear(unittest.TestCase):
 
 		# init
 		if self.link.params_initialized == False:
-			y = self.link(Variable(self.x))
+			self.link(Variable(self.x))
 
 		W = self.link._get_W_data()
 		b = self.link.b.data
@@ -44,7 +44,7 @@ class TestLinear(unittest.TestCase):
 			self.check_forward_options = {"atol": 1e-3, "rtol": 1e-2}
 			self.check_backward_options = {"atol": 1e-2, "rtol": 5e-2}
 		elif self.W_dtype == np.float16:
-			self.check_backward_options = {"atol": 1e-3, "rtol": 1e-2}
+			self.check_backward_options = {"atol": 1e-2, "rtol": 5e-2}
 
 	def check_forward(self, x_data):
 		x = Variable(x_data)
@@ -112,12 +112,12 @@ class TestLinearParameterShapePlaceholder(unittest.TestCase):
 		self.assertEqual(y.data.dtype, np.float32)
 		testing.assert_allclose(self.y, y.data)
 
-	@condition.retry(12)
+	@condition.retry(3)
 	def test_forward_cpu(self):
 		self.check_forward(self.x)
 
 	@attr.gpu
-	@condition.retry(12)
+	@condition.retry(3)
 	def test_forward_gpu(self):
 		self.link.to_gpu()
 		self.check_forward(cuda.to_gpu(self.x))
@@ -125,12 +125,12 @@ class TestLinearParameterShapePlaceholder(unittest.TestCase):
 	def check_backward(self, x_data, y_grad):
 		gradient_check.check_backward(self.link, x_data, y_grad, (self.link.V, self.link.g, self.link.b), eps=1e-2)
 
-	@condition.retry(12)
+	@condition.retry(3)
 	def test_backward_cpu(self):
 		self.check_backward(self.x, self.gy)
 
 	@attr.gpu
-	@condition.retry(12)
+	@condition.retry(3)
 	def test_backward_gpu(self):
 		self.link.to_gpu()
 		self.check_backward(cuda.to_gpu(self.x), cuda.to_gpu(self.gy))
