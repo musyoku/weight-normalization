@@ -28,9 +28,7 @@ class TestLinear(unittest.TestCase):
 		x_shape = (4,) + self.in_shape
 		self.x = np.random.uniform(-1, 1, x_shape).astype(self.x_dtype)
 
-		# init
-		if self.link.params_initialized == False:
-			self.link(Variable(self.x))
+		self.link(Variable(self.x))
 
 		W = self.link._get_W_data()
 		b = self.link.b.data
@@ -39,7 +37,7 @@ class TestLinear(unittest.TestCase):
 		self.gy = np.random.uniform(-1, 1, (4, self.out_size)).astype(self.x_dtype)
 		self.y = self.x.reshape(4, -1).dot(W.T) + b
 		self.check_forward_options = {}
-		self.check_backward_options = {}
+		self.check_backward_options = {"atol": 1e-4, "rtol": 3e-3}
 		if self.x_dtype == np.float16:
 			self.check_forward_options = {"atol": 1e-3, "rtol": 1e-2}
 			self.check_backward_options = {"atol": 1e-2, "rtol": 5e-2}
@@ -63,8 +61,7 @@ class TestLinear(unittest.TestCase):
 		self.check_forward(cuda.to_gpu(self.x))
 
 	def check_backward(self, x_data, y_grad):
-		gradient_check.check_backward(
-			self.link, x_data, y_grad, (self.link.V, self.link.g, self.link.b), eps=2 ** -3, **self.check_backward_options)
+		gradient_check.check_backward(self.link, x_data, y_grad, (self.link.V, self.link.g, self.link.b), eps=2 ** -3, **self.check_backward_options)
 
 	@condition.retry(3)
 	def test_backward_cpu(self):
@@ -122,7 +119,7 @@ class TestLinearParameterShapePlaceholder(unittest.TestCase):
 		self.check_forward(cuda.to_gpu(self.x))
 
 	def check_backward(self, x_data, y_grad):
-		gradient_check.check_backward(self.link, x_data, y_grad, (self.link.V, self.link.g, self.link.b), eps=1e-2)
+		gradient_check.check_backward(self.link, x_data, y_grad, (self.link.V, self.link.g, self.link.b), eps=1e-2, atol=1e-4, rtol=1e-3)
 
 	@condition.retry(3)
 	def test_backward_cpu(self):
@@ -158,19 +155,5 @@ class TestInvalidLinear(unittest.TestCase):
 
 		with self.assertRaises(type_check.InvalidType):
 			self.link(Variable(self.x))
-
-def check_implementation():
-	in_size = 5
-	out_size = 2
-	link = linear.Linear(in_size, out_size, initialV=chainer.initializers.Normal(1, np.float32))
-
-	x_shape = (4,) + (in_size,)
-	x = np.random.uniform(-1, 1, x_shape).astype(np.float32)
-
-	# init
-	if link.params_initialized == False:
-		y = link(Variable(x))
-
-check_implementation()
 
 testing.run_module(__name__, __file__)
