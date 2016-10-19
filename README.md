@@ -9,12 +9,14 @@ code for the paper [Weight Normalization: A Simple Reparameterization to Acceler
 ## Usage
 ### Installation
 
+```
 YOUR PROJECT DIR
 ├── weightnorm
 │   ├── __init__.py
 │   ├── convolution_2d.py
 │   ├── deconvolution_2d.py
 │   └── linear.py
+```
 
 ### Running
 
