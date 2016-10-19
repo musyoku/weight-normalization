@@ -71,7 +71,7 @@ class LinearFunction(linear.LinearFunction):
 		gW = gy.T.dot(x).astype(W.dtype, copy=False)
 
 		gg = xp.sum(gW * self.normalizedV, keepdims=True).reshape((1,)).astype(g.dtype, copy=False)
-		gV = g * (gW  - gg * self.normalizedV) / self.normV
+		gV = g * (gW - gg * self.normalizedV) / self.normV
 		gV = gV.astype(V.dtype, copy=False)
 
 		if len(inputs) == 4:
