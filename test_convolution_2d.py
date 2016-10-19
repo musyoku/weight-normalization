@@ -2,13 +2,10 @@ import numpy as np
 import six.moves.cPickle as pickle
 import unittest
 import chainer
-from chainer import cuda, Variable
-from chainer import testing
-from chainer import gradient_check
-from chainer.testing import attr
-from chainer.testing import condition
+from chainer import cuda, Variable, testing, gradient_check
+from chainer.testing import attr, condition
 from chainer.utils import conv
-import convolution_2d\
+import convolution_2d
 
 @testing.parameterize(*testing.product({
 	"x_dtype": [np.float16, np.float32, np.float64],
@@ -70,8 +67,7 @@ class TestConvolution2D(unittest.TestCase):
 
 	def check_backward(self, x_data, y_grad):
 		gradient_check.check_backward(
-			self.link, x_data, y_grad, (self.link.V, self.link.g, self.link.b), eps=2 ** -3,
-			**self.check_backward_options)
+			self.link, x_data, y_grad, (self.link.V, self.link.g, self.link.b), eps=2 ** -3, **self.check_backward_options)
 
 	@condition.retry(3)
 	def test_backward_cpu(self):

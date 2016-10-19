@@ -1,12 +1,8 @@
 import math
 import numpy as np
 from six import moves
-from chainer import cuda, Variable
-from chainer import initializers
-from chainer import link
-from chainer import function
-from chainer.utils import conv
-from chainer.utils import type_check
+from chainer import cuda, Variable, initializers, link, function
+from chainer.utils import conv, type_check
 from chainer.functions.connection import convolution_2d
 
 if cuda.cudnn_enabled:
@@ -139,6 +135,7 @@ class Convolution2D(link.Link):
 		self.pad = _pair(pad)
 		self.use_cudnn = use_cudnn
 		self.out_channels = out_channels
+		self.in_channels = in_channels
 		self.dtype = dtype
 
 		self.weight_initialized = False
