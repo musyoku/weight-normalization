@@ -91,7 +91,6 @@ class Linear(link.Link):
 	def __init__(self, in_size, out_size, wscale=1, bias=0, nobias=False, initialV=None, dtype=np.float32):
 		super(Linear, self).__init__()
 
-		self.params_initialized = False
 		self.weight_initialized = False
 		self.initialV = initialV
 		self.wscale = wscale
@@ -122,12 +121,12 @@ class Linear(link.Link):
 		g = 1 / self.std_t
 		b = -self.mean_t / self.std_t
 
+		print "g <- {}, b <- {}".format(g, b)
+
 		if self.nobias == False:
 			self.add_param("b", self.out_size, initializer=initializers.Constant(b, self.dtype))
 		self.add_param("g", 1, initializer=initializers.Constant(g, self.dtype))
 		
-		self.params_initialized = True
-
 	def _get_W_data(self):
 		V = self.V.data
 		xp = cuda.get_array_module(V)
@@ -140,8 +139,8 @@ class Linear(link.Link):
 			with cuda.get_device(self._device_id):
 				self._initialize_weight(x.size // len(x.data))
 
-		if self.params_initialized == False:
-			xp = cuda.get_array_module(x)
+		if hasattr(self, "b") == False or hasattr(self, "g") == False:
+			xp = cuda.get_array_module(x.data)
 			t = linear(x, self.V, Variable(xp.asarray([1]).astype(x.dtype)))	# compute output with g = 1 and without bias
 			self._initialize_params(t.data)
 			return (t - self.mean_t) / self.std_t
