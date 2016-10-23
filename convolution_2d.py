@@ -169,7 +169,7 @@ class Convolution2D(link.Link):
 		g = 1 / self.std_t
 		b = -self.mean_t / self.std_t
 
-		# print "g <- {}, b <- {}".format(g, b)
+		print "g <- {}, b <- {}".format(g.reshape((-1,)), b.reshape((-1,)))
 
 		if self.nobias == False:
 			self.add_param("b", self.out_channels, initializer=initializers.Constant(b.reshape((-1,)), self.dtype))
@@ -189,7 +189,7 @@ class Convolution2D(link.Link):
 
 		if hasattr(self, "b") == False or hasattr(self, "g") == False:
 			xp = cuda.get_array_module(x.data)
-			t = convolution_2d(x, self.V, Variable(xp.full((self.out_channels, 1, 1, 1), 1).astype(x.dtype)))	# compute output with g = 1 and without bias
+			t = convolution_2d(x, self.V, Variable(xp.full((self.out_channels, 1, 1, 1), 1.0).astype(x.dtype)), None, self.stride, self.pad, self.use_cudnn)	# compute output with g = 1 and without bias
 			self._initialize_params(t.data)
 			y = (t - self.mean_t) / self.std_t
 			return y

@@ -18,10 +18,11 @@ if cuda.cudnn_enabled:
 
 _check_cudnn_acceptable_type = convolution_2d._check_cudnn_acceptable_type
 
-def norm_gpu(x):
-	return cuda.cupy.sqrt(cuda.cupy.sum(x ** 2))
-
-cuda.cupy.linalg.norm = norm_gpu
+def get_norm(W):
+	xp = cuda.get_array_module(W)
+	norm = xp.sqrt(xp.sum(W ** 2, axis=(0, 2, 3))) + 1e-9
+	norm = norm.reshape((1, -1, 1, 1))
+	return norm
 
 def _pair(x):
 	if hasattr(x, "__getitem__"):
@@ -49,21 +50,19 @@ class Deconvolution2DFunction(deconvolution_2d.Deconvolution2DFunction):
 			g_type.dtype.kind == "f",
 			x_type.ndim == 4,
 			v_type.ndim == 4,
-			g_type.ndim == 1,
+			g_type.ndim == 4,
 			x_type.shape[1] == v_type.shape[0]
 		)
 
 		if self.outh is not None:
 			type_check.expect(
 				x_type.shape[2] ==
-				conv.get_conv_outsize(self.outh, v_type.shape[2],
-									  self.sy, self.ph),
+				conv.get_conv_outsize(self.outh, v_type.shape[2],self.sy, self.ph),
 			)
 		if self.outw is not None:
 			type_check.expect(
 				x_type.shape[3] ==
-				conv.get_conv_outsize(self.outw, v_type.shape[3],
-									  self.sx, self.pw),
+				conv.get_conv_outsize(self.outw, v_type.shape[3], self.sx, self.pw),
 			)
 
 		if n_in.eval() == 4:
@@ -78,7 +77,7 @@ class Deconvolution2DFunction(deconvolution_2d.Deconvolution2DFunction):
 		x, V, g = inputs[:3]
 		b = inputs[3] if len(inputs) == 4 else None
 		
-		self.normV = np.linalg.norm(V)
+		self.normV = get_norm(V)
 		self.normalizedV = V / self.normV
 		self.W = g * self.normalizedV
 
@@ -90,7 +89,7 @@ class Deconvolution2DFunction(deconvolution_2d.Deconvolution2DFunction):
 		x, V, g = inputs[:3]
 		b = inputs[3] if len(inputs) == 4 else None
 
-		self.normV = norm_gpu(V)
+		self.normV = get_norm(V)
 		self.normalizedV = V / self.normV
 		self.W = g * self.normalizedV
 		
@@ -108,7 +107,7 @@ class Deconvolution2DFunction(deconvolution_2d.Deconvolution2DFunction):
 			gx, gW, gb = super(Deconvolution2DFunction, self).backward_cpu((x, self.W, b), grad_outputs)
 
 		xp = cuda.get_array_module(x)
-		gg = xp.sum(gW * self.normalizedV, keepdims=True).reshape((1,)).astype(g.dtype, copy=False)
+		gg = xp.sum(gW * self.normalizedV, axis=(0, 2, 3), keepdims=True).astype(g.dtype, copy=False)
 		gV = g * (gW - gg * self.normalizedV) / self.normV
 		gV = gV.astype(V.dtype, copy=False)
 
@@ -127,7 +126,7 @@ class Deconvolution2DFunction(deconvolution_2d.Deconvolution2DFunction):
 			gx, gW, gb = super(Deconvolution2DFunction, self).backward_gpu((x, self.W, b), grad_outputs)
 
 		xp = cuda.get_array_module(x)
-		gg = xp.sum(gW * self.normalizedV, keepdims=True).reshape((1,)).astype(g.dtype, copy=False)
+		gg = xp.sum(gW * self.normalizedV, axis=(0, 2, 3), keepdims=True).astype(g.dtype, copy=False)
 		gV = g * (gW - gg * self.normalizedV) / self.normV
 		gV = gV.astype(V.dtype, copy=False)
 
@@ -174,16 +173,16 @@ class Deconvolution2D(link.Link):
 
 	def _initialize_params(self, t):
 		xp = cuda.get_array_module(t)
-		self.mean_t = float(xp.mean(t))
-		self.std_t = math.sqrt(float(xp.var(t)))
+		self.mean_t = xp.mean(t, axis=(0, 2, 3)).reshape((1, -1, 1, 1))
+		self.std_t = xp.sqrt(xp.var(t, axis=(0, 2, 3))).reshape((1, -1, 1, 1))
 		g = 1 / self.std_t
 		b = -self.mean_t / self.std_t
 
-		print "g <- {}, b <- {}".format(g, b)
+		print "g <- {}, b <- {}".format(g.reshape((-1,)), b.reshape((-1,)))
 
 		if self.nobias == False:
-			self.add_param("b", self.out_channels, initializer=initializers.Constant(b, self.dtype))
-		self.add_param("g", 1, initializer=initializers.Constant(g, self.dtype))
+			self.add_param("b", self.out_channels, initializer=initializers.Constant(b.reshape((-1, )), self.dtype))
+		self.add_param("g", (1, self.out_channels, 1, 1), initializer=initializers.Constant(g, self.dtype))
 
 	def _get_W_data(self):
 		V = self.V.data
@@ -196,7 +195,7 @@ class Deconvolution2D(link.Link):
 
 		if hasattr(self, "b") == False or hasattr(self, "g") == False:
 			xp = cuda.get_array_module(x.data)
-			t = deconvolution_2d(x, self.V, Variable(xp.asarray([1]).astype(x.dtype)), None, self.stride, self.pad, self.outsize, self.use_cudnn)	# compute output with g = 1 and without bias
+			t = deconvolution_2d(x, self.V, Variable(xp.full((1, self.out_channels, 1, 1), 1).astype(x.dtype)), None, self.stride, self.pad, self.outsize, self.use_cudnn)	# compute output with g = 1 and without bias
 			self._initialize_params(t.data)
 			return (t - self.mean_t) / self.std_t
 
