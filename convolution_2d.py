@@ -16,10 +16,11 @@ if cuda.cudnn_enabled:
 		_bwd_data_pref = \
 			libcudnn.CUDNN_CONVOLUTION_BWD_DATA_SPECIFY_WORKSPACE_LIMIT
 
-def norm_gpu(x):
-	return cuda.cupy.sqrt(cuda.cupy.sum(x ** 2))
-
-cuda.cupy.linalg.norm = norm_gpu
+def get_norm(W):
+	xp = cuda.get_array_module(W)
+	norm = xp.sqrt(xp.sum(W ** 2, axis=(1, 2, 3))) + 1e-9
+	norm = norm.reshape((-1, 1, 1, 1))
+	return norm
 
 def _check_cudnn_acceptable_type(x_dtype, W_dtype):
 	return x_dtype == W_dtype and (
@@ -44,7 +45,7 @@ class Convolution2DFunction(convolution_2d.Convolution2DFunction):
 			g_type.dtype.kind == "f",
 			x_type.ndim == 4,
 			v_type.ndim == 4,
-			g_type.ndim == 1,
+			g_type.ndim == 4,
 			x_type.shape[1] == v_type.shape[1],
 		)
 
@@ -60,7 +61,7 @@ class Convolution2DFunction(convolution_2d.Convolution2DFunction):
 		x, V, g = inputs[:3]
 		b = inputs[3] if len(inputs) == 4 else None
 		
-		self.normV = np.linalg.norm(V)
+		self.normV = get_norm(V)
 		self.normalizedV = V / self.normV
 		self.W = g * self.normalizedV
 
@@ -72,7 +73,7 @@ class Convolution2DFunction(convolution_2d.Convolution2DFunction):
 		x, V, g = inputs[:3]
 		b = inputs[3] if len(inputs) == 4 else None
 
-		self.normV = norm_gpu(V)
+		self.normV = get_norm(V)
 		self.normalizedV = V / self.normV
 		self.W = g * self.normalizedV
 		
@@ -90,7 +91,7 @@ class Convolution2DFunction(convolution_2d.Convolution2DFunction):
 			gx, gW, gb = super(Convolution2DFunction, self).backward_cpu((x, self.W, b), grad_outputs)
 
 		xp = cuda.get_array_module(x)
-		gg = xp.sum(gW * self.normalizedV, keepdims=True).reshape((1,)).astype(g.dtype, copy=False)
+		gg = xp.sum(gW * self.normalizedV, axis=(1, 2, 3), keepdims=True).astype(g.dtype, copy=False)
 		gV = g * (gW - gg * self.normalizedV) / self.normV
 		gV = gV.astype(V.dtype, copy=False)
 
@@ -109,7 +110,7 @@ class Convolution2DFunction(convolution_2d.Convolution2DFunction):
 			gx, gW, gb = super(Convolution2DFunction, self).backward_gpu((x, self.W, b), grad_outputs)
 
 		xp = cuda.get_array_module(x)
-		gg = xp.sum(gW * self.normalizedV, keepdims=True).reshape((1,)).astype(g.dtype, copy=False)
+		gg = xp.sum(gW * self.normalizedV, axis=(1, 2, 3), keepdims=True).astype(g.dtype, copy=False)
 		gV = g * (gW - gg * self.normalizedV) / self.normV
 		gV = gV.astype(V.dtype, copy=False)
 
@@ -163,21 +164,21 @@ class Convolution2D(link.Link):
 
 	def _initialize_params(self, t):
 		xp = cuda.get_array_module(t)
-		self.mean_t = float(xp.mean(t))
-		self.std_t = math.sqrt(float(xp.var(t)))
+		self.mean_t = xp.mean(t, axis=(1, 2, 3)).reshape(-1, 1, 1, 1)
+		self.std_t = xp.sqrt(xp.var(t, axis=(1, 2, 3))).reshape(-1, 1, 1, 1)
 		g = 1 / self.std_t
 		b = -self.mean_t / self.std_t
 
-		print "g <- {}, b <- {}".format(g, b)
+		# print "g <- {}, b <- {}".format(g, b)
 
 		if self.nobias == False:
-			self.add_param("b", self.out_channels, initializer=initializers.Constant(b, self.dtype))
-		self.add_param("g", 1, initializer=initializers.Constant(g, self.dtype))
+			self.add_param("b", self.out_channels, initializer=initializers.Constant(b.reshape((-1,)), self.dtype))
+		self.add_param("g", (self.out_channels, 1, 1, 1), initializer=initializers.Constant(g, self.dtype))
 
 	def _get_W_data(self):
 		V = self.V.data
 		xp = cuda.get_array_module(V)
-		norm = xp.linalg.norm(V)
+		norm = get_norm(V)
 		V = V / norm
 		return self.g.data * V
 
@@ -188,8 +189,9 @@ class Convolution2D(link.Link):
 
 		if hasattr(self, "b") == False or hasattr(self, "g") == False:
 			xp = cuda.get_array_module(x.data)
-			t = convolution_2d(x, self.V, Variable(xp.asarray([1]).astype(x.dtype)), None, self.stride, self.pad, self.use_cudnn)	# compute output with g = 1 and without bias
+			t = convolution_2d(x, self.V, Variable(xp.full((self.out_channels, 1, 1, 1), 1).astype(x.dtype)))	# compute output with g = 1 and without bias
 			self._initialize_params(t.data)
-			return (t - self.mean_t) / self.std_t
+			y = (t - self.mean_t) / self.std_t
+			return y
 
 		return convolution_2d(x, self.V, self.g, self.b, self.stride, self.pad, self.use_cudnn)

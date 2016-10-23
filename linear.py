@@ -13,10 +13,10 @@ def _as_mat(x):
 		return x
 	return x.reshape(len(x), -1)
 
-def get_norm_vector(W):
+def get_norm(W):
 	xp = cuda.get_array_module(W)
 	norm = xp.sqrt(xp.sum(W ** 2, axis=1)) + 1e-9
-	norm = xp.transpose(norm.reshape((1, -1)), (1, 0))
+	norm = norm.reshape((-1, 1))
 	return norm
 
 class LinearFunction(linear.LinearFunction):
@@ -50,7 +50,7 @@ class LinearFunction(linear.LinearFunction):
 		g = inputs[2]
 		xp = cuda.get_array_module(V)
 
-		self.normV = get_norm_vector(V)
+		self.normV = get_norm(V)
 		self.normalizedV = V / self.normV
 		self.W = g * self.normalizedV
 
@@ -122,7 +122,7 @@ class Linear(link.Link):
 		g = 1 / self.std_t
 		b = -self.mean_t / self.std_t
 
-		print "g <- {}, b <- {}".format(g, b)
+		# print "g <- {}, b <- {}".format(g, b)
 
 		if self.nobias == False:
 			self.add_param("b", self.out_size, initializer=initializers.Constant(b, self.dtype))
@@ -131,7 +131,7 @@ class Linear(link.Link):
 	def _get_W_data(self):
 		V = self.V.data
 		xp = cuda.get_array_module(V)
-		norm = get_norm_vector(V)
+		norm = get_norm(V)
 		V = V / norm
 		return self.g.data * V
 
