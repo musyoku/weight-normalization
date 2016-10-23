@@ -37,7 +37,7 @@ class TestLinear(unittest.TestCase):
 		self.gy = np.random.uniform(-1, 1, (4, self.out_size)).astype(self.x_dtype)
 		self.y = self.x.reshape(4, -1).dot(W.T) + b
 		self.check_forward_options = {}
-		self.check_backward_options = {"atol": 1e-4, "rtol": 3e-3}
+		self.check_backward_options = {"atol": 1e-2, "rtol": 3e-3}
 		if self.x_dtype == np.float16:
 			self.check_forward_options = {"atol": 1e-3, "rtol": 1e-2}
 			self.check_backward_options = {"atol": 1e-2, "rtol": 5e-2}
@@ -92,7 +92,7 @@ class TestLinearParameterShapePlaceholder(unittest.TestCase):
 		b = self.link.b.data
 		b[...] = np.random.uniform(-1, 1, b.shape).astype(np.float32)
 
-		W = g * V / np.linalg.norm(V)
+		W = g * (V / linear.get_norm_vector(V))
 		self.link.cleargrads()
 
 		x_shape = (4,) + self.in_shape
