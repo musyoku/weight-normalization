@@ -13,10 +13,10 @@ def _as_mat(x):
 		return x
 	return x.reshape(len(x), -1)
 
-def norm_gpu(x):
-	return cuda.cupy.sqrt(cuda.cupy.sum(x ** 2))
-
-cuda.cupy.linalg.norm = norm_gpu
+def get_norm_vector(W):
+	xp = cuda.get_array_module(W)
+	norm = xp.sqrt(xp.sum(W ** 2, axis=0))
+	return norm
 
 class LinearFunction(linear.LinearFunction):
 
@@ -116,8 +116,8 @@ class Linear(link.Link):
 
 	def _initialize_params(self, t):
 		xp = cuda.get_array_module(t)
-		self.mean_t = float(xp.mean(t))
-		self.std_t = math.sqrt(float(xp.var(t)))
+		self.mean_t = xp.mean(t, axis=0)
+		self.std_t = xp.sqrt(xp.var(t, axis=0))
 		g = 1 / self.std_t
 		b = -self.mean_t / self.std_t
 
@@ -125,7 +125,7 @@ class Linear(link.Link):
 
 		if self.nobias == False:
 			self.add_param("b", self.out_size, initializer=initializers.Constant(b, self.dtype))
-		self.add_param("g", 1, initializer=initializers.Constant(g, self.dtype))
+		self.add_param("g", self.out_size, initializer=initializers.Constant(g, self.dtype))
 		
 	def _get_W_data(self):
 		V = self.V.data
