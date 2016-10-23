@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import math
 import numpy as np
 from six import moves
@@ -76,7 +77,7 @@ class Convolution2DFunction(convolution_2d.Convolution2DFunction):
 		self.normV = get_norm(V)
 		self.normalizedV = V / self.normV
 		self.W = g * self.normalizedV
-		
+
 		if b is None:
 			return super(Convolution2DFunction, self).forward_gpu((x, self.W))
 		return super(Convolution2DFunction, self).forward_gpu((x, self.W, b))
@@ -164,12 +165,13 @@ class Convolution2D(link.Link):
 
 	def _initialize_params(self, t):
 		xp = cuda.get_array_module(t)
-		self.mean_t = xp.mean(t, axis=(1, 2, 3)).reshape(-1, 1, 1, 1)
-		self.std_t = xp.sqrt(xp.var(t, axis=(1, 2, 3))).reshape(-1, 1, 1, 1)
+		# 出力チャネルごとにミニバッチ平均をとる
+		self.mean_t = xp.mean(t, axis=(0, 2, 3)).reshape(1, -1, 1, 1)
+		self.std_t = xp.sqrt(xp.var(t, axis=(0, 2, 3))).reshape(1, -1, 1, 1)
 		g = 1 / self.std_t
 		b = -self.mean_t / self.std_t
 
-		print "g <- {}, b <- {}".format(g.reshape((-1,)), b.reshape((-1,)))
+		# print "g <- {}, b <- {}".format(g.reshape((-1,)), b.reshape((-1,)))
 
 		if self.nobias == False:
 			self.add_param("b", self.out_channels, initializer=initializers.Constant(b.reshape((-1,)), self.dtype))
@@ -191,7 +193,6 @@ class Convolution2D(link.Link):
 			xp = cuda.get_array_module(x.data)
 			t = convolution_2d(x, self.V, Variable(xp.full((self.out_channels, 1, 1, 1), 1.0).astype(x.dtype)), None, self.stride, self.pad, self.use_cudnn)	# compute output with g = 1 and without bias
 			self._initialize_params(t.data)
-			y = (t - self.mean_t) / self.std_t
-			return y
+			return (t - self.mean_t) / self.std_t
 
 		return convolution_2d(x, self.V, self.g, self.b, self.stride, self.pad, self.use_cudnn)

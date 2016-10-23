@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import math
 import numpy as np
 from six import moves
@@ -173,12 +174,13 @@ class Deconvolution2D(link.Link):
 
 	def _initialize_params(self, t):
 		xp = cuda.get_array_module(t)
+		# 出力チャネルごとにミニバッチ平均をとる
 		self.mean_t = xp.mean(t, axis=(0, 2, 3)).reshape((1, -1, 1, 1))
 		self.std_t = xp.sqrt(xp.var(t, axis=(0, 2, 3))).reshape((1, -1, 1, 1))
 		g = 1 / self.std_t
 		b = -self.mean_t / self.std_t
 
-		print "g <- {}, b <- {}".format(g.reshape((-1,)), b.reshape((-1,)))
+		# print "g <- {}, b <- {}".format(g.reshape((-1,)), b.reshape((-1,)))
 
 		if self.nobias == False:
 			self.add_param("b", self.out_channels, initializer=initializers.Constant(b.reshape((-1, )), self.dtype))
