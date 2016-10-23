@@ -142,7 +142,7 @@ class Linear(link.Link):
 
 		if hasattr(self, "b") == False or hasattr(self, "g") == False:
 			xp = cuda.get_array_module(x.data)
-			t = linear(x, self.V, Variable(xp.full((self.out_size, 1), 1).astype(x.dtype)))	# compute output with g = 1 and without bias
+			t = linear(x, self.V, Variable(xp.full((self.out_size, 1), 1.0).astype(x.dtype)))	# compute output with g = 1 and without bias
 			self._initialize_params(t.data)
 			return (t - self.mean_t) / self.std_t
 
