@@ -204,8 +204,3 @@ class Deconvolution2D(link.Link):
 		return deconvolution_2d(
 			x, self.V, self.g, self.b, self.stride, self.pad,
 			self.outsize, self.use_cudnn)
-
-def _pair(x):
-	if hasattr(x, "__getitem__"):
-		return x
-	return x, x
