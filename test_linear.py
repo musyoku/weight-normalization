@@ -92,14 +92,12 @@ class TestLinearParameterShapePlaceholder(unittest.TestCase):
 		b = self.link.b.data
 		b[...] = np.random.uniform(-1, 1, b.shape).astype(np.float32)
 
-		W = g * (V / linear.get_norm_vector(V))
+		W = g * (V / linear.get_norm(V))
 		self.link.cleargrads()
 
 		x_shape = (4,) + self.in_shape
 		self.x = np.random.uniform(-1, 1, x_shape).astype(np.float32)
-		self.x = np.ones(x_shape).astype(np.float32)
 		self.gy = np.random.uniform(-1, 1, (4, self.out_size)).astype(np.float32)
-		self.gy = np.ones((4, self.out_size)).astype(np.float32)
 		self.y = self.x.reshape(4, -1).dot(W.T) + b
 
 	def check_forward(self, x_data):
