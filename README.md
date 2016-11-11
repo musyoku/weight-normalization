@@ -2,6 +2,8 @@
 
 code for the paper [Weight Normalization: A Simple Reparameterization to Accelerate Training of Deep Neural Networks](https://arxiv.org/abs/1602.07868)
 
+[実装について](http://musyoku.github.io/2016/10/23/Weight-Normalization/)
+
 ## Requirements
 
 - Chainer 1.17
