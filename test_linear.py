@@ -23,14 +23,14 @@ class TestLinear(unittest.TestCase):
 
 	def setUp(self):
 		in_size = np.prod(self.in_shape)
-		self.link = linear.Linear(in_size, self.out_size, initialV=chainer.initializers.Normal(1, self.W_dtype), dtype=self.x_dtype)
+		self.link = linear.Linear(in_size, self.out_size, initialV=chainer.initializers.Normal(1, self.W_dtype))
 
 		x_shape = (4,) + self.in_shape
 		self.x = np.random.uniform(-1, 1, x_shape).astype(self.x_dtype)
 
 		self.link(Variable(self.x))
 
-		W = self.link._get_W_data()
+		W = self.link.W
 		b = self.link.b.data
 		self.link.cleargrads()
 
@@ -92,7 +92,7 @@ class TestLinearParameterShapePlaceholder(unittest.TestCase):
 		b = self.link.b.data
 		b[...] = np.random.uniform(-1, 1, b.shape).astype(np.float32)
 
-		W = g * (V / linear.get_norm(V))
+		W = g * (V / linear._norm(V))
 		self.link.cleargrads()
 
 		x_shape = (4,) + self.in_shape
@@ -134,13 +134,13 @@ class TestLinearParameterShapePlaceholder(unittest.TestCase):
 		x = Variable(self.x)
 		# Must call the link to initialize weights.
 		lin1(x)
-		w1 = lin1._get_W_data()
+		w1 = lin1.W
 		fd, temp_file_path = tempfile.mkstemp()
 		os.close(fd)
 		npz.save_npz(temp_file_path, lin1)
 		lin2 = linear.Linear(None, self.out_size)
 		npz.load_npz(temp_file_path, lin2)
-		w2 = lin2._get_W_data()
+		w2 = lin2.W
 		self.assertEqual((w1 == w2).all(), True)
 
 class TestInvalidLinear(unittest.TestCase):
