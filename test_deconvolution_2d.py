@@ -1,67 +1,80 @@
 import unittest
-import numpy as np
+
+import numpy
+
 import chainer
-from chainer import cuda, Variable, gradient_check, testing
-from chainer.testing import attr, condition, parameterize
+from chainer import cuda
+from chainer import gradient_check
+from chainer import links as L
+from chainer import testing
+from chainer.testing import attr
+from chainer.testing import condition
+from chainer.testing import parameterize
 from chainer.utils import conv
-import deconvolution_2d
+from deconvolution_2d import Deconvolution2D
+
 
 def _pair(x):
 	if hasattr(x, '__getitem__'):
 		return x
 	return x, x
 
+
 @parameterize(
 	*testing.product({
-		'in_channels': [3],
-		'out_channels': [2],
-		'ksize': [3],
-		'stride': [2],
-		'pad': [1],
 		'nobias': [True, False],
-		'use_cudnn': [True, False]
+		'use_cudnn': ['always', 'never']
 	})
 )
 class TestDeconvolution2D(unittest.TestCase):
 
 	def setUp(self):
-		self.link = deconvolution_2d.Deconvolution2D(
-			self.in_channels, self.out_channels, self.ksize,
-			stride=self.stride, pad=self.pad, nobias=self.nobias)
-		self.link.V.data[...] = np.random.uniform(-1, 1, self.link.V.data.shape).astype(np.float32)
-
+		in_channels = 3
+		out_channels = 2
+		ksize = 3
+		stride = 2
+		pad = 1
+		self.link = Deconvolution2D(
+			in_channels, out_channels, ksize,
+			stride=stride, pad=pad, nobias=self.nobias)
 
 		N = 2
 		h, w = 3, 2
-		kh, kw = _pair(self.ksize)
-		out_h = conv.get_deconv_outsize(h, kh, self.stride, self.pad)
-		out_w = conv.get_deconv_outsize(w, kw, self.stride, self.pad)
-		self.gy = np.random.uniform(-1, 1, (N, self.out_channels, out_h, out_w)).astype(np.float32)
-		self.x = np.random.uniform(-1, 1, (N, self.in_channels, h, w)).astype(np.float32)
+		kh, kw = _pair(ksize)
+		out_h = conv.get_deconv_outsize(h, kh, stride, pad)
+		out_w = conv.get_deconv_outsize(w, kw, stride, pad)
+		self.gy = numpy.random.uniform(
+			-1, 1, (N, out_channels, out_h, out_w)).astype(numpy.float32)
+		self.x = numpy.random.uniform(
+			-1, 1, (N, in_channels, h, w)).astype(numpy.float32)
 
-		self.link(Variable(self.x))
+		self.link(self.x)
+		
+		self.link.V.data[...] = numpy.random.uniform(
+			-1, 1, self.link.V.data.shape).astype(numpy.float32)
 		if not self.nobias:
-			self.link.b.data[...] = np.random.uniform(-1, 1, self.link.b.data.shape).astype(np.float32)
+			self.link.b.data[...] = numpy.random.uniform(
+				-1, 1, self.link.b.data.shape).astype(numpy.float32)
+
 		self.link.cleargrads()
-		self.check_backward_options = {"atol": 1e-5, "rtol": 3e-4}
 
 	def check_forward_consistency(self):
-		x_cpu = Variable(self.x)
+		x_cpu = chainer.Variable(self.x)
 		y_cpu = self.link(x_cpu)
-		self.assertEqual(y_cpu.data.dtype, np.float32)
+		self.assertEqual(y_cpu.data.dtype, numpy.float32)
 
 		self.link.to_gpu()
-		x_gpu = Variable(cuda.to_gpu(self.x))
+		x_gpu = chainer.Variable(cuda.to_gpu(self.x))
 		y_gpu = self.link(x_gpu)
-		self.assertEqual(y_gpu.data.dtype, np.float32)
+		self.assertEqual(y_gpu.data.dtype, numpy.float32)
 
 		testing.assert_allclose(y_cpu.data, y_gpu.data.get())
 
 	@attr.gpu
 	@condition.retry(3)
 	def test_forward_consistency(self):
-		self.link.use_cudnn = self.use_cudnn
-		self.check_forward_consistency()
+		with chainer.using_config('use_cudnn', self.use_cudnn):
+			self.check_forward_consistency()
 
 	def check_backward(self, x_data, y_grad):
 		params = [self.link.V, self.link.g]
@@ -77,9 +90,80 @@ class TestDeconvolution2D(unittest.TestCase):
 	@attr.gpu
 	@condition.retry(3)
 	def test_backward_gpu(self):
-		self.link.use_cudnn = self.use_cudnn
 		self.link.to_gpu()
-		self.check_backward(cuda.to_gpu(self.x), cuda.to_gpu(self.gy))
+		with chainer.using_config('use_cudnn', self.use_cudnn):
+			self.check_backward(cuda.to_gpu(self.x), cuda.to_gpu(self.gy))
+
+
+@parameterize(
+	*testing.product({
+		'nobias': [True, False],
+		'use_cudnn': ['always', 'never'],
+		'deconv_args': [((3, 2, 3), {}), ((2, 3), {}), ((None, 2, 3), {}),
+						((2, 3), {'stride': 2, 'pad': 1}),
+						((None, 2, 3, 2, 1), {})]
+	})
+)
+class TestDeconvolution2DParameterShapePlaceholder(unittest.TestCase):
+
+	def setUp(self):
+		args, kwargs = self.deconv_args
+		kwargs['nobias'] = self.nobias
+		self.link = Deconvolution2D(*args, **kwargs)
+		out_channels = self.link.out_channels
+		ksize = self.link.ksize
+		stride = self.link.stride[0]
+		pad = self.link.pad[0]
+		N = 2
+		h, w = 3, 2
+		kh, kw = _pair(ksize)
+		out_h = conv.get_deconv_outsize(h, kh, stride, pad)
+		out_w = conv.get_deconv_outsize(w, kw, stride, pad)
+		self.gy = numpy.random.uniform(
+			-1, 1, (N, out_channels, out_h, out_w)).astype(numpy.float32)
+		self.x = numpy.random.uniform(
+			-1, 1, (N, 3, h, w)).astype(numpy.float32)
+		self.link(chainer.Variable(self.x))
+		if not self.nobias:
+			self.link.b.data[...] = numpy.random.uniform(
+				-1, 1, self.link.b.data.shape).astype(numpy.float32)
+		self.link.cleargrads()
+
+	def check_forward_consistency(self):
+		x_cpu = chainer.Variable(self.x)
+		y_cpu = self.link(x_cpu)
+		self.assertEqual(y_cpu.data.dtype, numpy.float32)
+
+		self.link.to_gpu()
+		x_gpu = chainer.Variable(cuda.to_gpu(self.x))
+		y_gpu = self.link(x_gpu)
+		self.assertEqual(y_gpu.data.dtype, numpy.float32)
+
+		testing.assert_allclose(y_cpu.data, y_gpu.data.get())
+
+	@attr.gpu
+	@condition.retry(3)
+	def test_forward_consistency(self):
+		with chainer.using_config('use_cudnn', self.use_cudnn):
+			self.check_forward_consistency()
+
+	def check_backward(self, x_data, y_grad):
+		params = [self.link.V, self.link.g]
+		if not self.nobias:
+			params.append(self.link.b)
+
+		gradient_check.check_backward(self.link, x_data, y_grad, params, eps=1e-2, atol=1e-4, rtol=1e-4)
+
+	@condition.retry(3)
+	def test_backward_cpu(self):
+		self.check_backward(self.x, self.gy)
+
+	@attr.gpu
+	@condition.retry(3)
+	def test_backward_gpu(self):
+		self.link.to_gpu()
+		with chainer.using_config('use_cudnn', self.use_cudnn):
+			self.check_backward(cuda.to_gpu(self.x), cuda.to_gpu(self.gy))
 
 
 testing.run_module(__name__, __file__)

@@ -239,7 +239,7 @@ class Convolution2D(link.Link):
 				V_shape = (self.out_channels, in_channels, kh, kw)
 				self.V.initialize(V_shape)
 
-			self.b = variable.Parameter(None)
+			self.b = None if nobias else variable.Parameter(None)
 			self.g = variable.Parameter(None)		
 
 	def _initialize_params(self, t):
