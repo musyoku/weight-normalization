@@ -121,13 +121,6 @@ class Convolution2DFunction(convolution_2d.Convolution2DFunction):
 		else:
 			return gx, gV, gg, gb
 
-# def convolution_2d(x, V, g, b=None, stride=1, pad=0, use_cudnn=True, cover_all=False):
-# 	func = Convolution2DFunction(stride, pad, use_cudnn, cover_all)
-# 	if b is None:
-# 		return func(x, V, g)
-# 	else:
-# 		return func(x, V, g, b)
-
 def convolution_2d(x, V, g, b=None, stride=1, pad=0, cover_all=False, **kwargs):
 	argument.check_unexpected_kwargs(
 		kwargs, deterministic="deterministic argument is not "
@@ -141,74 +134,6 @@ def convolution_2d(x, V, g, b=None, stride=1, pad=0, cover_all=False, **kwargs):
 		return func(x, V, g)
 	else:
 		return func(x, V, g, b)
-
-# class Convolution2D(link.Link):
-
-# 	def __init__(self, in_channels, out_channels, ksize, 
-# 			stride=1, pad=0, wscale=1, bias=0, nobias=False, use_cudnn=True, initialV=None, dtype=np.float32):
-# 		super(Convolution2D, self).__init__()
-# 		self.ksize = ksize
-# 		self.stride = _pair(stride)
-# 		self.pad = _pair(pad)
-# 		self.use_cudnn = use_cudnn
-# 		self.out_channels = out_channels
-# 		self.in_channels = in_channels
-# 		self.dtype = dtype
-
-# 		self.initialV = initialV
-# 		self.wscale = wscale
-# 		self.nobias = nobias
-
-# 		if in_channels is None:
-# 			self.add_uninitialized_param("V")
-# 		else:
-# 			self._initialize_weight(in_channels)
-
-# 		if nobias:
-# 			self.b = None
-# 		else:
-# 			self.add_uninitialized_param("b")
-
-# 		self.add_uninitialized_param("g")
-
-# 	def _initialize_weight(self, in_channels):
-# 		kh, kw = _pair(self.ksize)
-# 		V_shape = (self.out_channels, in_channels, kh, kw)
-# 		self.add_param("V", V_shape, initializer=initializers._get_initializer(self.initialV, math.sqrt(self.wscale)))
-
-# 	def _initialize_params(self, t):
-# 		xp = cuda.get_array_module(t)
-# 		# 出力チャネルごとにミニバッチ平均をとる
-# 		self.mean_t = xp.mean(t, axis=(0, 2, 3)).reshape(1, -1, 1, 1)
-# 		self.std_t = xp.sqrt(xp.var(t, axis=(0, 2, 3))).reshape(1, -1, 1, 1)
-# 		g = 1 / self.std_t
-# 		b = -self.mean_t / self.std_t
-
-# 		# print "g <- {}, b <- {}".format(g.reshape((-1,)), b.reshape((-1,)))
-
-# 		if self.nobias == False:
-# 			self.add_param("b", self.out_channels, initializer=initializers.Constant(b.reshape((-1,)), self.dtype))
-# 		self.add_param("g", (self.out_channels, 1, 1, 1), initializer=initializers.Constant(g, self.dtype))
-
-# 	def _get_W_data(self):
-# 		V = self.V.data
-# 		xp = cuda.get_array_module(V)
-# 		norm = _norm(V)
-# 		V = V / norm
-# 		return self.g.data * V
-
-# 	def __call__(self, x):
-# 		if hasattr(self, "V") == False:
-# 			with cuda.get_device(self._device_id):
-# 				self._initialize_weight(x.shape[1])
-
-# 		if hasattr(self, "b") == False or hasattr(self, "g") == False:
-# 			xp = cuda.get_array_module(x.data)
-# 			t = convolution_2d(x, self.V, Variable(xp.full((self.out_channels, 1, 1, 1), 1.0).astype(x.dtype)), None, self.stride, self.pad, self.use_cudnn)	# compute output with g = 1 and without bias
-# 			self._initialize_params(t.data)
-# 			return (t - self.mean_t) / self.std_t
-
-# 		return convolution_2d(x, self.V, self.g, self.b, self.stride, self.pad, self.use_cudnn)
 
 class Convolution2D(link.Link):
 

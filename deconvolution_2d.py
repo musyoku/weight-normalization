@@ -151,68 +151,6 @@ def deconvolution_2d(x, V, g, b=None, stride=1, pad=0, outsize=None, **kwargs):
 	else:
 		return func(x, V, g, b)
 
-# class Deconvolution2D(link.Link):
-
-# 	def __init__(self, in_channels, out_channels, ksize, stride=1, pad=0,
-# 				 wscale=1, bias=0, nobias=False, outsize=None, use_cudnn=True,
-# 				 initialV=None, dtype=np.float32):
-# 		kh, kw = _pair(ksize)
-# 		self.stride = _pair(stride)
-# 		self.pad = _pair(pad)
-# 		self.outsize = (None, None) if outsize is None else outsize
-# 		self.use_cudnn = use_cudnn
-# 		self.dtype = dtype
-# 		self.nobias = nobias
-# 		self.out_channels = out_channels
-# 		self.in_channels = in_channels
-
-# 		V_shape = (in_channels, out_channels, kh, kw)
-# 		super(Deconvolution2D, self).__init__(V=V_shape)
-
-# 		if isinstance(initialV, (np.ndarray, cuda.ndarray)):
-# 			assert initialV.shape == (in_channels, out_channels, kh, kw)
-# 		initializers.init_weight(self.V.data, initialV, scale=math.sqrt(wscale))
-
-# 		if nobias:
-# 			self.b = None
-# 		else:
-# 			self.add_uninitialized_param("b")
-# 		self.add_uninitialized_param("g")
-
-# 	def _initialize_params(self, t):
-# 		xp = cuda.get_array_module(t)
-# 		# 出力チャネルごとにミニバッチ平均をとる
-# 		self.mean_t = xp.mean(t, axis=(0, 2, 3)).reshape((1, -1, 1, 1))
-# 		self.std_t = xp.sqrt(xp.var(t, axis=(0, 2, 3))).reshape((1, -1, 1, 1))
-# 		g = 1 / self.std_t
-# 		b = -self.mean_t / self.std_t
-
-# 		# print "g <- {}, b <- {}".format(g.reshape((-1,)), b.reshape((-1,)))
-
-# 		if self.nobias == False:
-# 			self.add_param("b", self.out_channels, initializer=initializers.Constant(b.reshape((-1, )), self.dtype))
-# 		self.add_param("g", (1, self.out_channels, 1, 1), initializer=initializers.Constant(g, self.dtype))
-
-# 	def _get_W_data(self):
-# 		V = self.V.data
-# 		xp = cuda.get_array_module(V)
-# 		norm = xp.linalg.norm(V)
-# 		V = V / norm
-# 		return self.g.data * V
-
-# 	def __call__(self, x):
-
-# 		if hasattr(self, "b") == False or hasattr(self, "g") == False:
-# 			xp = cuda.get_array_module(x.data)
-# 			t = deconvolution_2d(x, self.V, Variable(xp.full((1, self.out_channels, 1, 1), 1.0).astype(x.dtype)), None, self.stride, self.pad, self.outsize, self.use_cudnn)	# compute output with g = 1 and without bias
-# 			self._initialize_params(t.data)
-# 			return (t - self.mean_t) / self.std_t
-
-# 		return deconvolution_2d(
-# 			x, self.V, self.g, self.b, self.stride, self.pad,
-# 			self.outsize, self.use_cudnn)
-
-
 class Deconvolution2D(link.Link):
 
 	def __init__(self, in_channels, out_channels, ksize=None, stride=1, pad=0,
