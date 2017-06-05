@@ -84,66 +84,6 @@ def linear(x, V, g, b=None):
 	else:
 		return LinearFunction()(x, V, g, b)
 
-# class Linear(link.Link):
-
-# 	def __init__(self, in_size, out_size, wscale=1, bias=0, nobias=False, initialV=None, dtype=np.float32):
-# 		super(Linear, self).__init__()
-
-# 		self.initialV = initialV
-# 		self.wscale = wscale
-# 		self.nobias = nobias
-# 		self.dtype = dtype
-# 		self.out_size = out_size
-
-# 		if in_size is None:
-# 			self.add_uninitialized_param("V")
-# 		else:
-# 			self._initialize_weight(in_size)
-
-# 		if nobias:
-# 			self.b = None
-# 		else:
-# 			self.add_uninitialized_param("b")
-
-# 		self.add_uninitialized_param("g")
-
-# 	def _initialize_weight(self, in_size):
-# 		self.add_param("V", (self.out_size, in_size), initializer=initializers._get_initializer(self.initialV, math.sqrt(self.wscale)))
-
-# 	def _initialize_params(self, t):
-# 		xp = cuda.get_array_module(t)
-# 		self.mean_t = xp.mean(t, axis=0)
-# 		self.std_t = xp.sqrt(xp.var(t, axis=0))
-# 		g = 1 / self.std_t
-# 		b = -self.mean_t / self.std_t
-
-# 		# print "g <- {}, b <- {}".format(g, b)
-
-# 		if self.nobias == False:
-# 			self.add_param("b", self.out_size, initializer=initializers.Constant(b, self.dtype))
-# 		self.add_param("g", (self.out_size, 1), initializer=initializers.Constant(g.reshape(-1, 1), self.dtype))
-		
-# 	def _get_W_data(self):
-# 		V = self.V.data
-# 		xp = cuda.get_array_module(V)
-# 		norm = _norm(V)
-# 		V = V / norm
-# 		return self.g.data * V
-
-# 	def __call__(self, x):
-# 		if hasattr(self, "V") == False:
-# 			with cuda.get_device(self._device_id):
-# 				self._initialize_weight(x.size // len(x.data))
-
-# 		if hasattr(self, "b") == False or hasattr(self, "g") == False:
-# 			xp = cuda.get_array_module(x.data)
-# 			t = linear(x, self.V, Variable(xp.full((self.out_size, 1), 1.0).astype(x.dtype)))	# compute output with g = 1 and without bias
-# 			self._initialize_params(t.data)
-# 			return (t - self.mean_t) / self.std_t
-
-# 		return linear(x, self.V, self.g, self.b)
-
-
 class Linear(link.Link):
 
 	def __init__(self, in_size, out_size=None, nobias=False, initialV=None):
